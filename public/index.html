@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Store Enrollment</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <p class="eyebrow">Store Operations Suite</p>
+      <h1>Healthy Eluru Enrollment Form</h1>
+    
+    </section>
+
+    <div id="message" class="message"></div>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>Store Details</h2>
+       
+      </div>
+      <form id="storeForm" enctype="multipart/form-data">
+        <section class="form-group">
+          <div class="group-head">
+            <h3>1. Basic Information</h3>
+          
+          </div>
+          <div class="grid">
+            <label>
+              Store Name
+              <input type="text" name="storeName" required minlength="2" placeholder="ABC Store" />
+            </label>
+
+            <label>
+              Main Category
+              <select name="categorySingle" id="categorySingle">
+                <option value="">Select one</option>
+                <option value="vegatable">Vegatable</option>
+                <option value="fruits">Fruits</option>
+                <option value="food">Food</option>
+                <option value="medicies">Medicies</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="grid phones">
+            <label>Phone 1<input type="tel" name="phone1" required placeholder="enter a phone number" pattern="\d{10}" maxlength="10" title="Enter exactly 10 digits" /></label>
+            <label>Phone 2<input type="tel" name="phone2" placeholder="enter a phone number" pattern="\d{10}" maxlength="10" title="Enter exactly 10 digits" /></label>
+            <label>Phone 3<input type="tel" name="phone3" placeholder="enter a phone number" pattern="\d{10}" maxlength="10" title="Enter exactly 10 digits" /></label>
+          </div>
+
+          <fieldset>
+            <legend>Extra Categories</legend>
+            <div class="check-row">
+              <label><input type="checkbox" name="categories" value="veg" /> Veg</label>
+              <label><input type="checkbox" name="categories" value="non-veg" /> Non-Veg</label>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="form-group">
+          <div class="group-head">
+            <h3>2. Stores Details</h3>
+          </div>
+          <label>
+            Address
+            <textarea name="address" required minlength="5" rows="2" placeholder="Full street address"></textarea>
+          </label>
+
+          <div class="location-box">
+            <button type="button" id="locBtn">Use Current Location</button>
+            <p class="location-help">Tap on the map to drop a pin or drag the pin to adjust the exact location.</p>
+            <div id="locationMap" class="location-map" aria-label="Location picker map"></div>
+            <p id="locationText" style="text-align: center; margin-top: 12px; font-size: 0.9rem; color: #666;">No location selected.</p>
+            <input type="hidden" id="latitude" name="latitude" />
+            <input type="hidden" id="longitude" name="longitude" />
+            <input type="hidden" id="mapUrl" name="mapUrl" />
+          </div>
+
+          <div class="grid time-grid">
+            <label>
+              Open Time (AM/PM)
+              <input type="text" class="datetime-picker" name="openTime" required placeholder="Select time" readonly />
+            </label>
+            <label>
+              Closing Time (AM/PM)
+              <input type="text" class="datetime-picker" name="closingTime" required placeholder="Select time" readonly />
+            </label>
+          </div>
+
+          <fieldset>
+            <legend>Break Time (AM/PM)</legend>
+            <div id="breakTimesContainer" class="breaktimes-container">
+              <div class="breaktime-row">
+                <input type="text" class="break-start datetime-picker" placeholder="Break start" title="Select break start time" readonly />
+                <input type="text" class="break-end datetime-picker" placeholder="Break end" title="Select break end time" readonly />
+                <button type="button" class="remove-break-btn icon-btn" aria-label="Remove break time" title="Remove break time">-</button>
+              </div>
+            </div>
+            <button type="button" id="addBreakBtn" class="add-break-btn icon-btn" aria-label="Add break time" title="Add break time">+</button>
+          </fieldset>
+
+          <fieldset>
+            <legend>Service Time</legend>
+            <div class="check-row">
+              <label><input type="checkbox" name="serviceTimes" value="breakfast" /> Breakfast</label>
+              <label><input type="checkbox" name="serviceTimes" value="lunch" /> Lunch</label>
+              <label><input type="checkbox" name="serviceTimes" value="snack" /> Snack</label>
+              <label><input type="checkbox" name="serviceTimes" value="dinner" /> Dinner</label>
+            </div>
+          </fieldset>
+
+          <div class="grid images">
+            <label>
+              Store Images
+              <div class="image-input-stack">
+                <span class="input-hint">Choose one or more store images</span>
+                <input type="file" id="imagesInput" name="images" accept="image/*" multiple />
+              </div>
+              <div class="preview-grid" id="imagesPreviewGrid">
+                <div class="image-preview">No image selected</div>
+              </div>
+             
+            </label>
+          </div>
+        </section>
+
+        <section class="form-group">
+          <div class="group-head">
+            <h3>3. Menu Details</h3>
+          </div>
+
+          <div class="grid Menus">
+            <label>
+              Menu Files
+              <input type="file" id="menuFilesInput" name="menuFiles" multiple />
+              <div class="preview-grid" id="menuFilesPreviewGrid">
+                <div class="image-preview">No file selected</div>
+              </div>
+            </label>
+          </div>
+
+          <fieldset>
+            <legend>Menu Items Table</legend>
+          <div class="manual-table-wrap">
+            <table class="manual-table" aria-label="Menu items table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Quality</th>
+                  <th>Serve</th>
+                  <th>Price</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="manualItemsBody">
+                <tr class="manual-item-row">
+                  <td><input type="text" class="item-name" placeholder="Item name" /></td>
+                  <td><input type="text" class="item-quality" placeholder="Quality" /></td>
+                  <td><input type="text" class="item-serve" placeholder="Serve" /></td>
+                  <td><input type="number" class="item-price" min="0" step="0.01" placeholder="Price" /></td>
+                  <td><button type="button" class="remove-item-btn icon-btn" aria-label="Remove item row" title="Remove item row">-</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <button type="button" id="addItemRowBtn" class="add-item-btn icon-btn" aria-label="Add item row" title="Add item row">+</button>
+          </fieldset>
+        </section>
+
+        <div class="actions">
+          <button type="submit">Enroll Store</button>
+        </div>
+      </form>
+    
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>Enrolled Stores</h2>
+      </div>
+      <div id="storesList" class="stores-list">
+        <div class="stores-table-wrapper">
+          <table class="stores-table" aria-label="Enrolled stores table">
+            <thead>
+              <tr>
+                <th>Store Name</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="storesTableBody">
+              <tr><td colspan="2" style="text-align: center; padding: 20px;">Loading stores...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="preview-modal" id="previewModal" hidden>
+    <div class="preview-modal-backdrop" data-preview-close></div>
+    <section class="preview-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
+      <header class="preview-modal-header">
+        <h3 id="previewModalTitle">Preview</h3>
+        <button type="button" class="preview-modal-close" id="previewModalClose" aria-label="Close preview">×</button>
+      </header>
+      <div class="preview-modal-body" id="previewModalBody"></div>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>
