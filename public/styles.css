@@ -606,7 +606,8 @@ legend {
   font-weight: 700;
 }
 
-.remove-break-btn {
+.remove-break-btn,
+.remove-item-btn {
   background: #f5e8e3;
   color: #7a2f1f;
   border: 1px solid #e2c0b8;
