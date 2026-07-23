@@ -7,11 +7,16 @@
   --line: #d7cfc2;
   --muted: #6e665f;
   --focus: #87b7ab;
-  --mobile-max-width: 430px;
 }
 
 * {
   box-sizing: border-box;
+}
+
+html,
+body {
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 body {
@@ -25,9 +30,10 @@ body {
 }
 
 .page {
-  width: min(100%, var(--mobile-max-width));
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 12px 10px 28px;
+  padding: 10px 8px 24px;
   display: grid;
   gap: 12px;
 }
@@ -101,6 +107,8 @@ body {
   border-radius: 14px;
   padding: 12px;
   box-shadow: 0 10px 24px rgba(36, 34, 30, 0.08);
+  max-width: 100%;
+  min-width: 0;
 }
 
 .section-head {
@@ -130,6 +138,8 @@ form {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: linear-gradient(180deg, #fffdf9 0%, #faf7f1 100%);
+  max-width: 100%;
+  min-width: 0;
 }
 
 .group-head {
@@ -151,6 +161,8 @@ form {
 .grid {
   display: grid;
   gap: 12px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .grid.phones,
@@ -165,7 +177,7 @@ form {
 
 .preview-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-top: 8px;
 }
@@ -488,11 +500,13 @@ input,
 select,
 textarea {
   width: 100%;
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 9px;
   padding: 10px;
   background: #fbfaf8;
   color: var(--ink);
+  font-size: 16px;
 }
 
 input:focus,
@@ -521,6 +535,8 @@ fieldset {
   padding: 11px 10px;
   background: #fdfbf8;
   margin: 0;
+  max-width: 100%;
+  min-width: 0;
 }
 
 legend {
@@ -539,7 +555,7 @@ legend {
   align-items: center;
   gap: 6px;
   font-weight: 600;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .breaktimes-container {
@@ -560,14 +576,17 @@ legend {
 
 .Menu-table-wrap,
 .store-Menu-table-wrap {
-  overflow-x: auto;
+  overflow-x: hidden;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .Menu-table,
 .store-Menu-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 620px;
+  min-width: 0;
+  table-layout: fixed;
 }
 
 .Menu-table th,
@@ -578,6 +597,7 @@ legend {
   padding: 8px;
   text-align: left;
   font-size: 0.9rem;
+  word-break: break-word;
 }
 
 .Menu-table th,
@@ -586,7 +606,7 @@ legend {
 }
 
 .Menu-table td input {
-  min-width: 120px;
+  min-width: 0;
   padding: 8px;
 }
 
@@ -632,6 +652,8 @@ legend {
   border-radius: 10px;
   padding: 12px;
   background: #f6faf8;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .location-help {
@@ -957,11 +979,11 @@ button {
   }
 
   .card {
-    padding: 12px;
+    padding: 10px;
   }
 
   .form-group {
-    padding: 12px;
+    padding: 10px;
   }
 
   .check-row {
@@ -984,22 +1006,48 @@ button {
   .icon-btn {
     width: 100%;
   }
-}
 
-@media (max-width: 412px) {
-  .page {
-    max-width: 412px;
+  .Menu-table thead {
+    display: none;
   }
-}
 
-@media (max-width: 390px) {
-  .page {
-    max-width: 390px;
+  .Menu-table,
+  .Menu-table tbody,
+  .Menu-table tr,
+  .Menu-table td {
+    display: block;
+    width: 100%;
   }
-}
 
-@media (max-width: 360px) {
-  .page {
-    max-width: 360px;
+  .Menu-table tbody tr {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+  }
+
+  .Menu-table td {
+    border: none;
+    padding: 0;
+  }
+
+  .Menu-table td::before {
+    content: attr(data-label);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .Menu-table td[data-label='Action'] {
+    margin-top: 4px;
+  }
+
+  .Menu-table td[data-label='Action']::before {
+    display: none;
   }
 }

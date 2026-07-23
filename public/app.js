@@ -496,11 +496,11 @@ function createManualItemRow(item = '', quality = '', serve = '', price = '') {
   const row = document.createElement('tr');
   row.className = 'manual-item-row';
   row.innerHTML = `
-    <td><input type="text" class="item-name" placeholder="Item name" value="${item}" /></td>
-    <td><input type="text" class="item-quality" placeholder="Quality" value="${quality}" /></td>
-    <td><input type="text" class="item-serve" placeholder="Serve" value="${serve}" /></td>
-    <td><input type="number" class="item-price" min="0" step="0.01" placeholder="Price" value="${price}" /></td>
-    <td><button type="button" class="remove-item-btn icon-btn" aria-label="Remove item row" title="Remove item row">-</button></td>
+    <td data-label="Item"><input type="text" class="item-name" placeholder="Item name" value="${item}" /></td>
+    <td data-label="Quality"><input type="text" class="item-quality" placeholder="Quality" value="${quality}" /></td>
+    <td data-label="Serve"><input type="text" class="item-serve" placeholder="Serve" value="${serve}" /></td>
+    <td data-label="Price"><input type="number" class="item-price" min="0" step="0.01" placeholder="Price" value="${price}" /></td>
+    <td data-label="Action"><button type="button" class="remove-item-btn icon-btn" aria-label="Remove item row" title="Remove item row">-</button></td>
   `;
   return row;
 }
