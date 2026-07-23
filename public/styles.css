@@ -13,6 +13,11 @@
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 html,
 body {
   overflow-x: hidden;
@@ -33,7 +38,11 @@ body {
   width: 100%;
   max-width: 100%;
   margin: 0 auto;
-  padding: 10px 8px 24px;
+  padding:
+    max(10px, env(safe-area-inset-top))
+    max(8px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom))
+    max(8px, env(safe-area-inset-left));
   display: grid;
   gap: 12px;
 }
@@ -474,6 +483,83 @@ body.modal-open {
   overflow: hidden;
 }
 
+.success-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.success-popup[hidden] {
+  display: none !important;
+}
+
+.success-popup-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(14, 18, 15, 0.55);
+}
+
+.success-popup-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(92vw, 360px);
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px 20px;
+  text-align: center;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.28);
+  animation: success-popup-in 0.25s ease-out;
+}
+
+@keyframes success-popup-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.success-popup-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #d1fae5;
+  color: #10724f;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.success-popup-dialog h3 {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  color: var(--ink);
+}
+
+.success-popup-dialog p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.success-popup-detail {
+  margin-top: 10px !important;
+  font-size: 0.88rem !important;
+  font-weight: 600;
+  color: var(--accent) !important;
+  word-break: break-word;
+}
+
 .time-grid {
   grid-template-columns: 1fr;
 }
@@ -496,7 +582,7 @@ button {
   font: inherit;
 }
 
-input,
+input:not([type='checkbox']):not([type='radio']),
 select,
 textarea {
   width: 100%;
@@ -509,11 +595,66 @@ textarea {
   font-size: 16px;
 }
 
-input:focus,
+input[type='checkbox'],
+input[type='radio'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+  border: 2px solid #b8aea3;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  vertical-align: middle;
+  position: relative;
+}
+
+input[type='radio'] {
+  border-radius: 50%;
+}
+
+input[type='checkbox']:checked,
+input[type='radio']:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 6px;
+  height: 11px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+input[type='radio']:checked::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+input:not([type='checkbox']):not([type='radio']):focus,
 select:focus,
 textarea:focus {
   outline: 2px solid var(--focus);
   border-color: #6ba899;
+}
+
+input[type='checkbox']:focus,
+input[type='radio']:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 input.error-input,
@@ -537,6 +678,7 @@ fieldset {
   margin: 0;
   max-width: 100%;
   min-width: 0;
+  -webkit-min-logical-width: 0;
 }
 
 legend {
@@ -547,15 +689,35 @@ legend {
 .check-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 18px;
+  align-items: center;
+  gap: 12px 20px;
 }
 
 .check-row label {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  width: auto;
+  min-width: 0;
+  flex: 0 0 auto;
   font-weight: 600;
-  white-space: normal;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.check-row label span {
+  line-height: 1.2;
+  flex: 0 1 auto;
+}
+
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236e665f' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
 }
 
 .breaktimes-container {

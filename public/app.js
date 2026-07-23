@@ -20,7 +20,13 @@ const previewModal = document.getElementById('previewModal');
 const previewModalTitle = document.getElementById('previewModalTitle');
 const previewModalBody = document.getElementById('previewModalBody');
 const previewModalClose = document.getElementById('previewModalClose');
+const successPopup = document.getElementById('successPopup');
+const successPopupBackdrop = document.getElementById('successPopupBackdrop');
+const successPopupMessage = document.getElementById('successPopupMessage');
+const successPopupDetail = document.getElementById('successPopupDetail');
 const MAX_BREAK_ROWS = 3;
+
+let successPopupTimer = null;
 
 const DEFAULT_MAP_CENTER = [16.7107, 81.0952];
 
@@ -595,6 +601,59 @@ function showMessage(text, isError = false) {
   messageEl.className = `message ${isError ? 'err' : 'ok'}`;
 }
 
+function hideSuccessPopup() {
+  if (!successPopup) {
+    return;
+  }
+
+  successPopup.hidden = true;
+
+  if (!previewModal || previewModal.hidden) {
+    document.body.classList.remove('modal-open');
+  }
+
+  if (successPopupTimer) {
+    clearTimeout(successPopupTimer);
+    successPopupTimer = null;
+  }
+}
+
+function showSuccessPopup(message, store = null) {
+  if (!successPopup || !successPopupMessage) {
+    showMessage(message || 'Store enrolled successfully.');
+    return;
+  }
+
+  successPopupMessage.textContent = message || 'Store enrolled successfully.';
+
+  if (successPopupDetail) {
+    const storeName = store?.StoreName || store?.storeName || '';
+    const status = store?.Status || store?.status || '';
+    const detailParts = [storeName, status].filter(Boolean);
+
+    if (detailParts.length > 0) {
+      successPopupDetail.textContent = detailParts.join(' · ');
+      successPopupDetail.hidden = false;
+    } else {
+      successPopupDetail.textContent = '';
+      successPopupDetail.hidden = true;
+    }
+  }
+
+  successPopup.hidden = false;
+  document.body.classList.add('modal-open');
+
+  if (successPopupTimer) {
+    clearTimeout(successPopupTimer);
+  }
+
+  successPopupTimer = setTimeout(hideSuccessPopup, 5000);
+}
+
+if (successPopupBackdrop) {
+  successPopupBackdrop.addEventListener('click', hideSuccessPopup);
+}
+
 function selectedValues(name) {
   return Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map((el) => el.value);
 }
@@ -893,7 +952,8 @@ form.addEventListener('submit', async (event) => {
       return;
     }
 
-    showMessage('Store enrolled successfully.');
+    showSuccessPopup(result.message, result.store);
+    showMessage(result.message || 'Store enrolled successfully.');
     form.reset();
     resetLocationMap();
     if (breakTimesContainer) {

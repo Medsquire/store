@@ -500,10 +500,11 @@ app.post('/api/stores', upload.fields([
       return res.status(500).json({ error: 'Failed to create store.', details: 'Stored procedure returned no records' });
     }
 
-    console.log('[STORE] SUCCESS: Store created', records[0].Guid);
+    const record = records[0];
+    console.log('[STORE] SUCCESS: Store created', record.Guid);
     return res.status(201).json({
-      message: 'Store enrolled successfully.',
-      store: records[0]
+      message: record.Message || record.message || 'Store enrolled successfully.',
+      store: record
     });
   } catch (err) {
     console.error('[STORE] ERROR creating store:', err.message);
