@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const multer = require('multer');
 const cors = require('cors');
 const axios = require('axios');
@@ -21,18 +22,36 @@ if (!imgbbEnabled) {
   console.log('✓ Imgbb API enabled for image uploads');
 }
 
-const uploadsDir = path.join(__dirname, 'uploads');
-const dataDir = path.join(__dirname, 'data');
-const storesFile = path.join(dataDir, 'stores.json');
+let uploadsDir = path.join(__dirname, 'uploads');
+let dataDir = path.join(__dirname, 'data');
 
-for (const dir of [uploadsDir, dataDir]) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+try {
+  // Attempt to create directories in the application root directory
+  for (const dir of [uploadsDir, dataDir]) {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  }
+} catch (err) {
+  console.warn(`⚠️ Write access denied in ${__dirname}. Falling back to system temp directory.`);
+  const tempDir = os.tmpdir();
+  uploadsDir = path.join(tempDir, 'uploads');
+  dataDir = path.join(tempDir, 'data');
+
+  for (const dir of [uploadsDir, dataDir]) {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
   }
 }
 
+const storesFile = path.join(dataDir, 'stores.json');
 if (!fs.existsSync(storesFile)) {
-  fs.writeFileSync(storesFile, '[]', 'utf-8');
+  try {
+    fs.writeFileSync(storesFile, '[]', 'utf-8');
+  } catch (err) {
+    console.error(`⚠️ Failed to create stores.json in ${dataDir}:`, err.message);
+  }
 }
 
 app.use(cors());
