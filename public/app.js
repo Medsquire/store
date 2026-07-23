@@ -31,6 +31,7 @@ let locationMap;
 let locationMarker;
 
 const uploadedImageRecords = [];
+const uploadedMenuFileRecords = [];
 let currentImageFiles = [];
 let currentMenuFiles = [];
 let currentPreviewObjectUrl = '';
@@ -151,6 +152,7 @@ function renderImagePreviewGrid(files) {
   files.forEach((file, index) => {
     imagesPreviewGrid.appendChild(createPreviewCard(file, 'image', index, (i) => {
       currentImageFiles.splice(i, 1);
+      uploadedImageRecords.splice(i, 1);
       renderImagePreviewGrid(currentImageFiles);
     }));
   });
@@ -172,6 +174,7 @@ function renderMenuPreviewGrid(files) {
   files.forEach((file, index) => {
     menuFilesPreviewGrid.appendChild(createPreviewCard(file, 'menu file', index, (i) => {
       currentMenuFiles.splice(i, 1);
+      uploadedMenuFileRecords.splice(i, 1);
       renderMenuPreviewGrid(currentMenuFiles);
     }));
   });
@@ -222,6 +225,55 @@ async function uploadImageFiles(files) {
   }
 
   showMessage(`${uploadedImageRecords.length} image(s) uploaded successfully.`);
+}
+
+async function uploadMenuFiles(files) {
+  if (!files.length) {
+    console.log('No menu files to upload');
+    return;
+  }
+
+  showMessage('Uploading menu files...');
+
+  for (const file of files) {
+    if (file.type && file.type.startsWith('image/')) {
+      console.log(`Uploading menu image: ${file.name}`);
+      const uploadData = new FormData();
+      uploadData.append('image', file);
+
+      try {
+        const response = await fetch('/api/upload-image', {
+          method: 'POST',
+          body: uploadData
+        });
+        
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || `Menu image upload failed (${response.status})`);
+        }
+
+        uploadedMenuFileRecords.push({
+          fileName: result.image.originalName,
+          fileUrl: result.image.url,
+          isUploaded: true
+        });
+        console.log(`Successfully uploaded menu image: ${file.name}`);
+      } catch (err) {
+        console.error(`Failed to upload menu image ${file.name}:`, err);
+        throw err;
+      }
+    } else {
+      // Non-image files will be uploaded on form submit
+      uploadedMenuFileRecords.push({
+        fileName: file.name,
+        file: file,
+        isUploaded: false
+      });
+    }
+  }
+
+  const uploadedImagesCount = uploadedMenuFileRecords.filter(r => r.isUploaded).length;
+  showMessage(`Processed ${files.length} menu file(s) (${uploadedImagesCount} image(s) uploaded).`);
 }
 
 function addLocationToList(lat, lng) {
@@ -579,11 +631,22 @@ if (imagesInput) {
 }
 
 if (menuFilesInput) {
-  menuFilesInput.addEventListener('change', (event) => {
+  menuFilesInput.addEventListener('change', async (event) => {
     const newFiles = Array.from(event.currentTarget.files || []);
+    if (newFiles.length === 0) {
+      return;
+    }
+
     const merged = currentMenuFiles.concat(newFiles);
     renderMenuPreviewGrid(merged);
     menuFilesInput.value = '';
+
+    try {
+      await uploadMenuFiles(newFiles);
+    } catch (err) {
+      uploadedMenuFileRecords.length = 0;
+      showMessage(err.message || 'Menu upload failed.', true);
+    }
   });
 }
 
@@ -624,6 +687,7 @@ function collectFormData() {
   const breakTimes = collectBreakTimes();
   const manualItems = collectManualItems();
   const uploadedImages = uploadedImageRecords;
+  const uploadedMenuFiles = uploadedMenuFileRecords.filter(r => r.isUploaded);
 
   data.set('phones', JSON.stringify(phones));
   data.set('memos', JSON.stringify(memos));
@@ -632,11 +696,19 @@ function collectFormData() {
   data.set('breakTimes', JSON.stringify(breakTimes));
   data.set('manualItems', JSON.stringify(manualItems));
   data.set('uploadedImages', JSON.stringify(uploadedImages));
+  data.set('uploadedMenuFiles', JSON.stringify(uploadedMenuFiles));
   data.set('locations', singleLocation ? JSON.stringify([singleLocation]) : JSON.stringify([]));
 
   if (uploadedImages.length > 0) {
     data.delete('images');
   }
+
+  data.delete('menuFiles');
+  uploadedMenuFileRecords
+    .filter(r => !r.isUploaded)
+    .forEach((r) => {
+      data.append('menuFiles', r.file);
+    });
 
   ['phone1', 'phone2', 'phone3', 'categorySingle']
     .forEach((field) => data.delete(field));
@@ -835,6 +907,7 @@ form.addEventListener('submit', async (event) => {
       manualItemsBody.appendChild(createManualItemRow());
     }
     uploadedImageRecords.length = 0;
+    uploadedMenuFileRecords.length = 0;
     currentImageFiles = [];
     currentMenuFiles = [];
     if (imagesInput) {

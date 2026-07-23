@@ -436,10 +436,34 @@ app.post('/api/stores', upload.fields([
     }
 
     // Menu files
-    const menuFilesList = (req.files?.menuFiles || []).map((file) => ({
-      fileName: file.originalname,
-      fileUrl: `/uploads/${file.filename}`
-    }));
+    const uploadedMenuFiles = parseJsonField(req.body.uploadedMenuFiles, []);
+    const menuFilesList = [];
+
+    for (const existing of uploadedMenuFiles) {
+      const existingUrl = String(existing?.fileUrl || '').trim();
+      if (existingUrl) {
+        menuFilesList.push({
+          fileName: String(existing?.fileName || 'menu'),
+          fileUrl: existingUrl
+        });
+      }
+    }
+
+    const menuFiles = req.files?.menuFiles || [];
+    for (const file of menuFiles) {
+      if (imgbbEnabled && file.mimetype.startsWith('image/')) {
+        const image = await buildImageRecord(file);
+        menuFilesList.push({
+          fileName: image.originalName,
+          fileUrl: image.url
+        });
+      } else {
+        menuFilesList.push({
+          fileName: file.originalname,
+          fileUrl: `/uploads/${file.filename}`
+        });
+      }
+    }
 
     // Log the parameters
     console.log('[STORE] Calling spCreateStore with params:');
