@@ -1,3 +1,5 @@
+
+
 # Store Enrollment SPA (Frontend + Backend)
 
 A simple single-page application to enroll stores with all required details:
