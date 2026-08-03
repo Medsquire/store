@@ -6,12 +6,44 @@ const multer = require('multer');
 const cors = require('cors');
 const axios = require('axios');
 const FormData = require('form-data');
+const { MongoClient, ObjectId } = require('mongodb');
 const db = require('./lib/database');
 
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// MongoDB connection setup
+const MONGODB_URI = `mongodb+srv://${process.env.MONGODB_USER || 'admin'}:${process.env.MONGODB_PASSWORD}@project.emlrxdt.mongodb.net/healthyeluru?retryWrites=true&w=majority`;
+const MONGODB_DB = process.env.MONGODB_DB || 'healthyeluru';
+const MONGODB_COLLECTION = process.env.MONGODB_COLLECTION || 'orders';
+
+let mongoClient;
+let ordersCollection;
+let pricelistCollection;
+
+// Initialize MongoDB connection
+async function connectMongoDB() {
+  try {
+    if (!mongoClient) {
+      mongoClient = new MongoClient(MONGODB_URI);
+      await mongoClient.connect();
+      console.log('✓ MongoDB connected successfully');
+      
+      const db = mongoClient.db(MONGODB_DB);
+      ordersCollection    = db.collection(MONGODB_COLLECTION);
+      pricelistCollection = db.collection('pricelist');
+      console.log(`✓ Connected to collections: ${MONGODB_COLLECTION}, pricelist`);
+    }
+  } catch (err) {
+    console.error('✗ MongoDB connection error:', err.message);
+    // Continue without MongoDB connection
+  }
+}
+
+// Connect to MongoDB on startup
+connectMongoDB();
 
 const IMGBB_API_KEY = process.env.Imgbb_API;
 const imgbbEnabled = Boolean(IMGBB_API_KEY);
@@ -57,7 +89,14 @@ if (!fs.existsSync(storesFile)) {
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(uploadsDir));
-app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve React build only when running locally (Vercel CDN handles static files in production)
+if (process.env.NODE_ENV !== 'production') {
+  const clientDist = path.join(__dirname, 'client', 'dist');
+  if (fs.existsSync(clientDist)) {
+    app.use(express.static(clientDist));
+  }
+}
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadsDir),
@@ -274,18 +313,8 @@ async function buildImageRecord(file) {
 
 app.post('/api/upload-image', upload.single('image'), async (req, res) => {
   try {
-    console.log('[UPLOAD] Received image upload request');
-    
-    if (!req.file) {
-      console.log('[UPLOAD] ERROR: No file in request');
-      return res.status(400).json({ error: 'Image file is required.' });
-    }
-
-    console.log(`[UPLOAD] Processing file: ${req.file.originalname} (${req.file.size} bytes)`);
-    
     const image = await buildImageRecord(req.file);
     
-    console.log(`[UPLOAD] SUCCESS: Image uploaded with provider: ${image.provider}`);
     return res.status(201).json({ image });
   } catch (err) {
     console.error('[UPLOAD] ERROR:', err.message);
@@ -299,15 +328,10 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/stores', async (_req, res) => {
   try {
-    console.log('[STORES] GET /api/stores called');
     const result = await db.executeStoredProcedure('dbo.spGetAllStore', {
       Status: null,
       Created_By: null
     });
-    
-    console.log('[STORES] Recordset count:', result.recordset?.length || 0);
-    console.log('[STORES] Result:', JSON.stringify(result.recordset || [], null, 2));
-    
     res.json(result.recordset || []);
   } catch (err) {
     console.error('[STORES] ERROR:', err.message);
@@ -465,8 +489,7 @@ app.post('/api/stores', upload.fields([
       }
     }
 
-    // Log the parameters
-    console.log('[STORE] Calling spCreateStore with params:');
+    // Build params
     const params = {
       StoreName: storeName,
       MainCategory: mainCategory || null,
@@ -487,28 +510,20 @@ app.post('/api/stores', upload.fields([
       MenuFiles: menuFilesList.length > 0 ? JSON.stringify(menuFilesList) : null,
       Created_By: null
     };
-    console.log('[STORE] Params:', JSON.stringify(params, null, 2));
-    
     const result = await db.executeStoredProcedure('dbo.spCreateStore', params);
 
-    console.log('[STORE] Result recordsets:', result.recordsets?.length || 0);
-    console.log('[STORE] Result recordset rows:', (result.recordset || []).length);
-    
     const records = result.recordset || [];
     if (records.length === 0) {
-      console.log('[STORE] ERROR: Stored procedure returned empty recordset');
       return res.status(500).json({ error: 'Failed to create store.', details: 'Stored procedure returned no records' });
     }
 
     const record = records[0];
-    console.log('[STORE] SUCCESS: Store created', record.Guid);
     return res.status(201).json({
       message: record.Message || record.message || 'Store enrolled successfully.',
       store: record
     });
   } catch (err) {
     console.error('[STORE] ERROR creating store:', err.message);
-    console.error('[STORE] Full error:', err);
     if (err.message.includes('Store name is required')) {
       return res.status(400).json({ error: 'Store name is required.' });
     }
@@ -528,10 +543,282 @@ app.post('/api/stores', upload.fields([
   }
 });
 
-app.use((_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// ===== MONGODB ORDERS API =====
+
+// Temp debug: show collection stats and a sample doc
+app.get('/api/debug-orders', async (_req, res) => {
+  try {
+    if (!ordersCollection) return res.json({ error: 'no collection' });
+    const total  = await ordersCollection.countDocuments({});
+    const sample = await ordersCollection.find({}).limit(2).toArray();
+    const cols   = await ordersCollection.listIndexes().toArray();
+    res.json({ total, sample, indexes: cols });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+app.get('/api/orders', async (_req, res) => {
+  try {
+    if (!ordersCollection) {
+      return res.status(503).json({ 
+        error: 'MongoDB connection not available',
+        orders: []
+      });
+    }
+
+    // Today's date range (midnight to now)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const orders = await ordersCollection
+      .find({ createdAt: { $gte: todayStart, $lte: todayEnd } })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .toArray();
+
+    res.json({ orders });
+  } catch (err) {
+    console.error('[ORDERS] ERROR fetching orders:', err.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch orders',
+      details: err.message,
+      orders: []
+    });
+  }
 });
+
+// Paginated order history (all orders, newest first)
+app.get('/api/orders-history', async (req, res) => {
+  try {
+    if (!ordersCollection) {
+      return res.status(503).json({ error: 'MongoDB connection not available', orders: [], total: 0 });
+    }
+
+    const page  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 5);
+    const skip  = (page - 1) * limit;
+
+    const [orders, total] = await Promise.all([
+      ordersCollection.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray(),
+      ordersCollection.countDocuments({}),
+    ]);
+
+    res.json({ orders, total, page, limit, pages: Math.ceil(total / limit) });
+  } catch (err) {
+    console.error('[ORDERS-HISTORY] ERROR:', err.message);
+    res.status(500).json({ error: 'Failed to fetch order history', details: err.message, orders: [], total: 0 });
+  }
+});
+
+app.get('/api/orders/:orderId', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!ordersCollection) {
+      return res.status(503).json({ error: 'MongoDB connection not available' });
+    }
+
+    const order = await ordersCollection.findOne({ id: orderId });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    res.json(order);
+  } catch (err) {
+    console.error('[ORDERS] ERROR fetching order:', err.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch order',
+      details: err.message
+    });
+  }
+});
+
+app.post('/api/orders/:orderId/status', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
+
+    if (!ordersCollection) {
+      return res.status(503).json({ error: 'MongoDB connection not available' });
+    }
+
+    if (!['new', 'accepted', 'picked', 'delivered', 'cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    let filter;
+    try {
+      filter = { _id: new ObjectId(orderId) };
+    } catch {
+      filter = { id: orderId };
+    }
+
+    const result = await ordersCollection.updateOne(
+      filter,
+      { $set: { status, updatedAt: new Date() } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    res.json({ success: true, message: 'Order status updated' });
+  } catch (err) {
+    console.error('[ORDERS] ERROR updating order:', err.message);
+    res.status(500).json({ 
+      error: 'Failed to update order',
+      details: err.message
+    });
+  }
+});
+
+// ===== PRICELIST API =====
+
+// GET all items (optionally filter by category)
+app.get('/api/pricelist', async (req, res) => {
+  try {
+    if (!pricelistCollection) {
+      return res.status(503).json({ error: 'MongoDB not available', items: [] });
+    }
+    const { category } = req.query;
+    const filter = category ? { category } : {};
+    const items = await pricelistCollection
+      .find(filter)
+      .sort({ category: 1, sku: 1 })
+      .toArray();
+    res.json({ items });
+  } catch (err) {
+    console.error('[PRICELIST] GET error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch pricelist', items: [] });
+  }
+});
+
+// GET distinct categories
+app.get('/api/pricelist/categories', async (req, res) => {
+  try {
+    if (!pricelistCollection) {
+      return res.status(503).json({ error: 'MongoDB not available', categories: [] });
+    }
+    const categories = await pricelistCollection.distinct('category');
+    res.json({ categories: categories.filter(Boolean).sort() });
+  } catch (err) {
+    console.error('[PRICELIST] CATEGORIES error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch categories', categories: [] });
+  }
+});
+
+// PUT update a single item's price
+app.put('/api/pricelist/:itemId', async (req, res) => {
+  try {
+    if (!pricelistCollection) {
+      return res.status(503).json({ error: 'MongoDB not available' });
+    }
+    const { itemId } = req.params;
+    const { price } = req.body;
+
+    if (price === undefined || isNaN(Number(price)) || Number(price) < 0) {
+      return res.status(400).json({ error: 'Valid price is required' });
+    }
+
+    let filter;
+    try { filter = { _id: new ObjectId(itemId) }; }
+    catch { filter = { id: itemId }; }
+
+    // Fetch current price to store as oldPrice
+    const existing = await pricelistCollection.findOne(filter);
+    if (!existing) return res.status(404).json({ error: 'Item not found' });
+
+    await pricelistCollection.updateOne(filter, {
+      $set: {
+        oldprice:  existing.newprice,
+        newprice:  Number(price),
+        updatedAt: new Date(),
+      },
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[PRICELIST] PUT error:', err.message);
+    res.status(500).json({ error: 'Failed to update price' });
+  }
+});
+
+// POST bulk-update multiple items
+app.post('/api/pricelist/bulk-update', async (req, res) => {
+  try {
+    if (!pricelistCollection) {
+      return res.status(503).json({ error: 'MongoDB not available' });
+    }
+    const { updates } = req.body; // [{ _id, price }]
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({ error: 'updates array required' });
+    }
+
+    const ops = updates.map(u => {
+      let filter;
+      try { filter = { _id: new ObjectId(String(u._id)) }; }
+      catch { filter = { id: u._id }; }
+      return {
+        updateOne: {
+          filter,
+          update: { $set: { newprice: Number(u.newprice), updatedAt: new Date() } },
+        },
+      };
+    });
+
+    const result = await pricelistCollection.bulkWrite(ops);
+    res.json({ success: true, modified: result.modifiedCount });
+  } catch (err) {
+    console.error('[PRICELIST] BULK error:', err.message);
+    res.status(500).json({ error: 'Bulk update failed' });
+  }
+});
+
+// POST seed / upsert items (called once to populate from app data)
+app.post('/api/pricelist/seed', async (req, res) => {
+  try {
+    if (!pricelistCollection) {
+      return res.status(503).json({ error: 'MongoDB not available' });
+    }
+    const { items } = req.body; // [{ itemNo, name, category, price, unit, image, description }]
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items array required' });
+    }
+
+    const ops = items.map(item => ({
+      updateOne: {
+        filter: { category: item.category, itemNo: item.itemNo },
+        update: { $setOnInsert: { oldPrice: item.price }, $set: { ...item, updatedAt: new Date() } },
+        upsert: true,
+      },
+    }));
+
+    const result = await pricelistCollection.bulkWrite(ops);
+    res.json({ success: true, upserted: result.upsertedCount, modified: result.modifiedCount });
+  } catch (err) {
+    console.error('[PRICELIST] SEED error:', err.message);
+    res.status(500).json({ error: 'Seed failed' });
+  }
+});
+
+app.use((_req, res) => {
+  const clientIndex = path.join(__dirname, 'client', 'dist', 'index.html');
+  if (process.env.NODE_ENV !== 'production' && fs.existsSync(clientIndex)) {
+    res.sendFile(clientIndex);
+  } else {
+    res.status(404).json({ error: 'Not found' });
+  }
+});
+
+// Export for Vercel serverless; listen only when run directly (local dev)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
