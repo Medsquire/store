@@ -15,7 +15,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // MongoDB connection setup
-const MONGODB_URI = `mongodb+srv://${process.env.MONGODB_USER || 'admin'}:${process.env.MONGODB_PASSWORD}@project.emlrxdt.mongodb.net/healthyeluru?retryWrites=true&w=majority`;
+const MONGODB_URI = `mongodb+srv://${process.env.MONGODB_USER || 'admin'}:${process.env.MONGODB_PASSWORD}@project.emlrxdt.mongodb.net/healthyeluru?retryWrites=true&w=majority&appName=healthyeluru`;
 const MONGODB_DB = process.env.MONGODB_DB || 'healthyeluru';
 const MONGODB_COLLECTION = process.env.MONGODB_COLLECTION || 'orders';
 
@@ -23,27 +23,37 @@ let mongoClient;
 let ordersCollection;
 let pricelistCollection;
 
-// Initialize MongoDB connection
-async function connectMongoDB() {
-  try {
-    if (!mongoClient) {
-      mongoClient = new MongoClient(MONGODB_URI);
+// Returns the orders collection, connecting on demand (safe for Vercel cold starts)
+let connectPromise = null;
+async function getCollections() {
+  if (ordersCollection && pricelistCollection) return { ordersCollection, pricelistCollection };
+  if (!connectPromise) {
+    connectPromise = (async () => {
+      if (!process.env.MONGODB_PASSWORD) {
+        throw new Error('MONGODB_PASSWORD environment variable is not set');
+      }
+      mongoClient = new MongoClient(MONGODB_URI, {
+        serverSelectionTimeoutMS: 10000,
+        connectTimeoutMS: 10000,
+      });
       await mongoClient.connect();
       console.log('✓ MongoDB connected successfully');
-      
       const db = mongoClient.db(MONGODB_DB);
       ordersCollection    = db.collection(MONGODB_COLLECTION);
       pricelistCollection = db.collection('pricelist');
       console.log(`✓ Connected to collections: ${MONGODB_COLLECTION}, pricelist`);
-    }
-  } catch (err) {
-    console.error('✗ MongoDB connection error:', err.message);
-    // Continue without MongoDB connection
+    })().catch(err => {
+      console.error('✗ MongoDB connection error:', err.message);
+      connectPromise = null; // allow retry on next request
+      throw err;
+    });
   }
+  await connectPromise;
+  return { ordersCollection, pricelistCollection };
 }
 
-// Connect to MongoDB on startup
-connectMongoDB();
+// Warm up connection on startup (non-blocking; errors are retried per-request)
+getCollections().catch(() => {});
 
 const IMGBB_API_KEY = process.env.Imgbb_API;
 const imgbbEnabled = Boolean(IMGBB_API_KEY);
@@ -548,10 +558,10 @@ app.post('/api/stores', upload.fields([
 // Temp debug: show collection stats and a sample doc
 app.get('/api/debug-orders', async (_req, res) => {
   try {
-    if (!ordersCollection) return res.json({ error: 'no collection' });
-    const total  = await ordersCollection.countDocuments({});
-    const sample = await ordersCollection.find({}).limit(2).toArray();
-    const cols   = await ordersCollection.listIndexes().toArray();
+    const { ordersCollection: col } = await getCollections();
+    const total  = await col.countDocuments({});
+    const sample = await col.find({}).limit(2).toArray();
+    const cols   = await col.listIndexes().toArray();
     res.json({ total, sample, indexes: cols });
   } catch (err) {
     res.json({ error: err.message });
@@ -560,12 +570,7 @@ app.get('/api/debug-orders', async (_req, res) => {
 
 app.get('/api/orders', async (_req, res) => {
   try {
-    if (!ordersCollection) {
-      return res.status(503).json({ 
-        error: 'MongoDB connection not available',
-        orders: []
-      });
-    }
+    const { ordersCollection: col } = await getCollections();
 
     // Today's date range (midnight to now)
     const todayStart = new Date();
@@ -573,7 +578,7 @@ app.get('/api/orders', async (_req, res) => {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    const orders = await ordersCollection
+    const orders = await col
       .find({ createdAt: { $gte: todayStart, $lte: todayEnd } })
       .sort({ createdAt: -1 })
       .limit(100)
@@ -593,17 +598,15 @@ app.get('/api/orders', async (_req, res) => {
 // Paginated order history (all orders, newest first)
 app.get('/api/orders-history', async (req, res) => {
   try {
-    if (!ordersCollection) {
-      return res.status(503).json({ error: 'MongoDB connection not available', orders: [], total: 0 });
-    }
+    const { ordersCollection: col } = await getCollections();
 
     const page  = Math.max(1, parseInt(req.query.page)  || 1);
     const limit = Math.max(1, parseInt(req.query.limit) || 5);
     const skip  = (page - 1) * limit;
 
     const [orders, total] = await Promise.all([
-      ordersCollection.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray(),
-      ordersCollection.countDocuments({}),
+      col.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray(),
+      col.countDocuments({}),
     ]);
 
     res.json({ orders, total, page, limit, pages: Math.ceil(total / limit) });
@@ -616,12 +619,9 @@ app.get('/api/orders-history', async (req, res) => {
 app.get('/api/orders/:orderId', async (req, res) => {
   try {
     const { orderId } = req.params;
+    const { ordersCollection: col } = await getCollections();
 
-    if (!ordersCollection) {
-      return res.status(503).json({ error: 'MongoDB connection not available' });
-    }
-
-    const order = await ordersCollection.findOne({ id: orderId });
+    const order = await col.findOne({ id: orderId });
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
@@ -641,10 +641,7 @@ app.post('/api/orders/:orderId/status', async (req, res) => {
   try {
     const { orderId } = req.params;
     const { status } = req.body;
-
-    if (!ordersCollection) {
-      return res.status(503).json({ error: 'MongoDB connection not available' });
-    }
+    const { ordersCollection: col } = await getCollections();
 
     if (!['new', 'accepted', 'picked', 'delivered', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
@@ -657,7 +654,7 @@ app.post('/api/orders/:orderId/status', async (req, res) => {
       filter = { id: orderId };
     }
 
-    const result = await ordersCollection.updateOne(
+    const result = await col.updateOne(
       filter,
       { $set: { status, updatedAt: new Date() } }
     );
@@ -681,12 +678,10 @@ app.post('/api/orders/:orderId/status', async (req, res) => {
 // GET all items (optionally filter by category)
 app.get('/api/pricelist', async (req, res) => {
   try {
-    if (!pricelistCollection) {
-      return res.status(503).json({ error: 'MongoDB not available', items: [] });
-    }
+    const { pricelistCollection: col } = await getCollections();
     const { category } = req.query;
     const filter = category ? { category } : {};
-    const items = await pricelistCollection
+    const items = await col
       .find(filter)
       .sort({ category: 1, sku: 1 })
       .toArray();
@@ -700,10 +695,8 @@ app.get('/api/pricelist', async (req, res) => {
 // GET distinct categories
 app.get('/api/pricelist/categories', async (req, res) => {
   try {
-    if (!pricelistCollection) {
-      return res.status(503).json({ error: 'MongoDB not available', categories: [] });
-    }
-    const categories = await pricelistCollection.distinct('category');
+    const { pricelistCollection: col } = await getCollections();
+    const categories = await col.distinct('category');
     res.json({ categories: categories.filter(Boolean).sort() });
   } catch (err) {
     console.error('[PRICELIST] CATEGORIES error:', err.message);
@@ -714,9 +707,7 @@ app.get('/api/pricelist/categories', async (req, res) => {
 // PUT update a single item's price
 app.put('/api/pricelist/:itemId', async (req, res) => {
   try {
-    if (!pricelistCollection) {
-      return res.status(503).json({ error: 'MongoDB not available' });
-    }
+    const { pricelistCollection: col } = await getCollections();
     const { itemId } = req.params;
     const { price } = req.body;
 
@@ -729,10 +720,10 @@ app.put('/api/pricelist/:itemId', async (req, res) => {
     catch { filter = { id: itemId }; }
 
     // Fetch current price to store as oldPrice
-    const existing = await pricelistCollection.findOne(filter);
+    const existing = await col.findOne(filter);
     if (!existing) return res.status(404).json({ error: 'Item not found' });
 
-    await pricelistCollection.updateOne(filter, {
+    await col.updateOne(filter, {
       $set: {
         oldprice:  existing.newprice,
         newprice:  Number(price),
@@ -750,9 +741,7 @@ app.put('/api/pricelist/:itemId', async (req, res) => {
 // POST bulk-update multiple items
 app.post('/api/pricelist/bulk-update', async (req, res) => {
   try {
-    if (!pricelistCollection) {
-      return res.status(503).json({ error: 'MongoDB not available' });
-    }
+    const { pricelistCollection: col } = await getCollections();
     const { updates } = req.body; // [{ _id, price }]
     if (!Array.isArray(updates) || updates.length === 0) {
       return res.status(400).json({ error: 'updates array required' });
@@ -770,7 +759,7 @@ app.post('/api/pricelist/bulk-update', async (req, res) => {
       };
     });
 
-    const result = await pricelistCollection.bulkWrite(ops);
+    const result = await col.bulkWrite(ops);
     res.json({ success: true, modified: result.modifiedCount });
   } catch (err) {
     console.error('[PRICELIST] BULK error:', err.message);
@@ -781,9 +770,7 @@ app.post('/api/pricelist/bulk-update', async (req, res) => {
 // POST seed / upsert items (called once to populate from app data)
 app.post('/api/pricelist/seed', async (req, res) => {
   try {
-    if (!pricelistCollection) {
-      return res.status(503).json({ error: 'MongoDB not available' });
-    }
+    const { pricelistCollection: col } = await getCollections();
     const { items } = req.body; // [{ itemNo, name, category, price, unit, image, description }]
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'items array required' });
@@ -797,7 +784,7 @@ app.post('/api/pricelist/seed', async (req, res) => {
       },
     }));
 
-    const result = await pricelistCollection.bulkWrite(ops);
+    const result = await col.bulkWrite(ops);
     res.json({ success: true, upserted: result.upsertedCount, modified: result.modifiedCount });
   } catch (err) {
     console.error('[PRICELIST] SEED error:', err.message);
