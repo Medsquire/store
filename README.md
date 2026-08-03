@@ -104,3 +104,5 @@ A simple single-page application to enroll stores with all required details:
 - Tablet screen: 768px width
 - Desktop screens: 1024px and above
 - The UI uses a classic professional layout with responsive spacing, typography, and form controls for all above sizes.
+
+mongodb
