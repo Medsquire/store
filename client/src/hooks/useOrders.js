@@ -3,6 +3,24 @@ import { fetchOrders, updateOrderStatus } from '../api/orders';
 
 const NEXT_STATUS = { new: 'accepted', accepted: 'picked', picked: 'delivered' };
 
+function normalizeStatus(status) {
+  if (status === 'ordered') return 'new';
+  if (status === 'in_progress') return 'accepted';
+  if (status === 'out_for_delivery') return 'picked';
+  return status;
+}
+
+function toMillis(value) {
+  const ts = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function normalizeAndSortOrders(list) {
+  return [...(Array.isArray(list) ? list : [])]
+    .map(order => ({ ...order, status: normalizeStatus(order.status || 'new') }))
+    .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+}
+
 export function useOrders(isOnDuty) {
   const [orders, setOrders]   = useState([]);
   const [loading, setLoading] = useState(false);
@@ -14,7 +32,7 @@ export function useOrders(isOnDuty) {
     setError(null);
     try {
       const data = await fetchOrders();
-      setOrders(data);
+      setOrders(normalizeAndSortOrders(data));
     } catch (err) {
       setError(err.message);
     } finally {

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || 'http://localhost:5000';
 
 export default defineConfig({
   plugins: [react()],
@@ -14,8 +15,8 @@ export default defineConfig({
   server: {
     port: 3001,
     proxy: {
-      '/api':     { target: 'http://localhost:5000', changeOrigin: true },
-      '/uploads': { target: 'http://localhost:5000', changeOrigin: true },
+      '/api':     { target: apiProxyTarget, changeOrigin: true },
+      '/uploads': { target: apiProxyTarget, changeOrigin: true },
     },
   },
 });

@@ -572,17 +572,43 @@ app.get('/api/orders', async (_req, res) => {
   try {
     const { ordersCollection: col } = await getCollections();
 
-    // Today's date range (midnight to now)
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
+    // Build today's date range in IST for the live dashboard.
+    const istDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const todayStart = new Date(`${istDate}T00:00:00+05:30`);
+    const todayEnd = new Date(`${istDate}T23:59:59.999+05:30`);
 
-    const orders = await col
-      .find({ createdAt: { $gte: todayStart, $lte: todayEnd } })
-      .sort({ createdAt: -1 })
-      .limit(100)
-      .toArray();
+    // Handle both Date and string createdAt values from MongoDB.
+    const orders = await col.aggregate([
+      {
+        $addFields: {
+          createdAtDate: {
+            $cond: [
+              { $eq: [{ $type: '$createdAt' }, 'date'] },
+              '$createdAt',
+              {
+                $dateFromString: {
+                  dateString: '$createdAt',
+                  onError: null,
+                  onNull: null,
+                },
+              },
+            ],
+          },
+        },
+      },
+      {
+        $match: {
+          createdAtDate: { $gte: todayStart, $lte: todayEnd },
+        },
+      },
+      { $sort: { createdAtDate: -1 } },
+      { $project: { createdAtDate: 0 } },
+    ]).toArray();
 
     res.json({ orders });
   } catch (err) {
