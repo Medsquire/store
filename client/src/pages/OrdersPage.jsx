@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useOrders } from '../hooks/useOrders';
+import { useOrderAlarm } from '../hooks/useOrderAlarm';
 import StatsBar from '../components/orders/StatsBar';
 import OffDutyOverlay from '../components/orders/OffDutyOverlay';
 import KanbanBoard from '../components/orders/KanbanBoard';
@@ -9,6 +10,7 @@ import OrderDetailModal from '../components/orders/OrderDetailModal';
 export default function OrdersPage() {
   const { isOnDuty } = useApp();
   const { orders, advance, error } = useOrders(isOnDuty);
+  useOrderAlarm(isOnDuty ? orders : []);
   const [selectedOrder, setSelectedOrder] = useState(null);
 
   return (
