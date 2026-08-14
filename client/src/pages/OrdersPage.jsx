@@ -8,7 +8,7 @@ import KanbanBoard from '../components/orders/KanbanBoard';
 import OrderDetailModal from '../components/orders/OrderDetailModal';
 
 export default function OrdersPage() {
-  const { isOnDuty } = useApp();
+  const { isOnDuty, dutyLoading } = useApp();
   const { orders, advance, error } = useOrders(isOnDuty);
   useOrderAlarm(isOnDuty ? orders : []);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -23,7 +23,7 @@ export default function OrdersPage() {
         </div>
       )}
 
-      <OffDutyOverlay visible={!isOnDuty} />
+      <OffDutyOverlay visible={!dutyLoading && !isOnDuty} />
       <KanbanBoard
         orders={orders}
         onAdvance={advance}

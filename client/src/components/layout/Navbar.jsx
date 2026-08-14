@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 
 export default function Navbar() {
-  const { isOnDuty, setIsOnDuty } = useApp();
+  const { isOnDuty, setIsOnDuty, dutyLoading, dutySaving } = useApp();
 
   return (
     <nav className="navbar">
@@ -60,7 +60,8 @@ export default function Navbar() {
             <input
               type="checkbox"
               checked={isOnDuty}
-              onChange={e => setIsOnDuty(e.target.checked)}
+              disabled={dutyLoading || dutySaving}
+              onChange={e => { void setIsOnDuty(e.target.checked); }}
             />
             <span className="toggle-slider" />
             <span className="toggle-label">{isOnDuty ? 'On Duty' : 'Off Duty'}</span>

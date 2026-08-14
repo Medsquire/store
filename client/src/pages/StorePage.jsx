@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { submitStore } from '../api/stores';
 
 const DEFAULT_CENTER  = [16.7107, 81.0952];
@@ -8,6 +8,49 @@ const MAX_BREAKS      = 3;
 
 function emptyRow() {
   return { name: '', quality: '', serve: '', price: '' };
+}
+
+function normalizeTime12h(value) {
+  if (!value || typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim().toUpperCase().replace(/\s+/g, ' ');
+  const match = trimmed.match(/^(\d{1,2}):([0-5][0-9])\s?(AM|PM)$/);
+  if (!match) {
+    return '';
+  }
+
+  const hours = Number(match[1]);
+  if (hours < 1 || hours > 12) {
+    return '';
+  }
+
+  return `${String(hours).padStart(2, '0')}:${match[2]} ${match[3]}`;
+}
+
+function toMinutesFromTime12h(value) {
+  const match = String(value || '').match(/^(\d{1,2}):([0-5][0-9])\s(AM|PM)$/);
+  if (!match) {
+    return null;
+  }
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const meridiem = match[3];
+
+  if (hours < 1 || hours > 12) {
+    return null;
+  }
+
+  if (hours === 12) {
+    hours = 0;
+  }
+  if (meridiem === 'PM') {
+    hours += 12;
+  }
+
+  return hours * 60 + minutes;
 }
 
 export default function StorePage() {
@@ -127,6 +170,69 @@ export default function StorePage() {
   };
   const removeBreak = idx => setBreakTimes(prev => prev.filter((_, i) => i !== idx));
 
+  const isFormValid = useMemo(() => {
+    const hasStoreName = storeName.trim().length >= 2;
+    const hasMainCategory = category.trim().length > 0;
+    const hasValidPhone1 = /^\d{10}$/.test(phone1.trim());
+    const hasAddress = address.trim().length >= 5;
+    const hasServiceTime = serviceTimes.length > 0;
+    const normalizedOpen = normalizeTime12h(openTime);
+    const normalizedClose = normalizeTime12h(closingTime);
+    const openMinutes = toMinutesFromTime12h(normalizedOpen);
+    const closeMinutes = toMinutesFromTime12h(normalizedClose);
+    const hasValidTimeRange = openMinutes !== null && closeMinutes !== null && closeMinutes > openMinutes;
+
+    return (
+      hasStoreName &&
+      hasMainCategory &&
+      hasValidPhone1 &&
+      hasAddress &&
+      hasServiceTime &&
+      hasValidTimeRange
+    );
+  }, [storeName, category, phone1, address, serviceTimes, openTime, closingTime]);
+
+  const resetFormState = useCallback(() => {
+    setStoreName('');
+    setCategory('');
+    setExtraCats([]);
+    setPhone1('');
+    setPhone2('');
+    setPhone3('');
+    setAddress('');
+    setServiceTimes([]);
+    setMenuItems([emptyRow()]);
+    setBreakTimes([{ start: '', end: '' }]);
+    setImageFiles([]);
+    setMenuFiles([]);
+    setOpenTime('');
+    setClosingTime('');
+    setLocationText('');
+    setLat('');
+    setLng('');
+
+    openPickrRef.current?.clear();
+    closePickrRef.current?.clear();
+
+    if (markerRef.current && mapInstanceRef.current) {
+      mapInstanceRef.current.removeLayer(markerRef.current);
+      markerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!message.text) {
+      return;
+    }
+
+    const timeout = message.type === 'success' ? 3000 : 5000;
+    const timer = setTimeout(() => {
+      setMessage({ text: '', type: '' });
+    }, timeout);
+
+    return () => clearTimeout(timer);
+  }, [message]);
+
   /* ── submit ── */
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -155,9 +261,7 @@ export default function StorePage() {
     try {
       await submitStore(fd);
       setMessage({ text: '✓ Store enrolled successfully!', type: 'success' });
-      e.target.reset();
-      setMenuItems([emptyRow()]);
-      setBreakTimes([{ start: '', end: '' }]);
+      resetFormState();
     } catch (err) {
       setMessage({ text: err.message, type: 'error' });
     } finally {
@@ -180,21 +284,22 @@ export default function StorePage() {
         <div className="section-head"><h2>Store Details</h2></div>
 
         <form onSubmit={handleSubmit} encType="multipart/form-data">
+          <p className="form-required-note"><span className="required-asterisk">*</span> Required fields</p>
 
           {/* ── 1. Basic Info ── */}
           <section className="form-group">
             <div className="group-head"><h3>1. Basic Information</h3></div>
             <div className="grid">
               <label>
-                Store Name
+                Store Name <span className="required-asterisk">*</span>
                 <input
                   type="text" required minLength={2} placeholder="ABC Store"
                   value={storeName} onChange={e => setStoreName(e.target.value)}
                 />
               </label>
               <label>
-                Main Category
-                <select value={category} onChange={e => setCategory(e.target.value)}>
+                Main Category <span className="required-asterisk">*</span>
+                <select required value={category} onChange={e => setCategory(e.target.value)}>
                   <option value="">Select one</option>
                   {CATEGORIES.map(c => <option key={c} value={c.toLowerCase()}>{c}</option>)}
                 </select>
@@ -202,7 +307,7 @@ export default function StorePage() {
             </div>
 
             <div className="grid phones">
-              <label>Phone 1<input type="tel" required maxLength={10} pattern="\d{10}" placeholder="10-digit number" value={phone1} onChange={e => setPhone1(e.target.value)} /></label>
+              <label>Phone 1 <span className="required-asterisk">*</span><input type="tel" required maxLength={10} pattern="\d{10}" placeholder="10-digit number" value={phone1} onChange={e => setPhone1(e.target.value)} /></label>
               <label>Phone 2<input type="tel" maxLength={10} pattern="\d{10}" placeholder="optional" value={phone2} onChange={e => setPhone2(e.target.value)} /></label>
               <label>Phone 3<input type="tel" maxLength={10} pattern="\d{10}" placeholder="optional" value={phone3} onChange={e => setPhone3(e.target.value)} /></label>
             </div>
@@ -225,7 +330,7 @@ export default function StorePage() {
             <div className="group-head"><h3>2. Store Details</h3></div>
 
             <label>
-              Address
+              Address <span className="required-asterisk">*</span>
               <textarea required minLength={5} rows={2} placeholder="Full street address" value={address} onChange={e => setAddress(e.target.value)} />
             </label>
 
@@ -241,8 +346,8 @@ export default function StorePage() {
             </div>
 
             <div className="grid time-grid">
-              <label>Open Time<input id="openTimePicker" type="text" placeholder="Select time" readOnly /></label>
-              <label>Closing Time<input id="closeTimePicker" type="text" placeholder="Select time" readOnly /></label>
+              <label>Open Time <span className="required-asterisk">*</span><input id="openTimePicker" type="text" placeholder="Select time" readOnly required value={openTime} /></label>
+              <label>Closing Time <span className="required-asterisk">*</span><input id="closeTimePicker" type="text" placeholder="Select time" readOnly required value={closingTime} /></label>
             </div>
 
             <fieldset>
@@ -262,7 +367,7 @@ export default function StorePage() {
             </fieldset>
 
             <fieldset>
-              <legend>Service Time</legend>
+              <legend>Service Time <span className="required-asterisk">*</span></legend>
               <div className="check-row">
                 {SERVICE_TIMES.map(s => (
                   <label key={s}>
@@ -346,9 +451,10 @@ export default function StorePage() {
           </section>
 
           <div className="actions">
-            <button type="submit" disabled={submitting}>
+            <button type="submit" disabled={submitting || !isFormValid}>
               {submitting ? 'Enrolling…' : 'Enroll Store'}
             </button>
+            {!isFormValid && <p className="form-required-note">Please fill all required fields to enable enrollment.</p>}
           </div>
         </form>
       </section>

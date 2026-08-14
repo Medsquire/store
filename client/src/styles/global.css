@@ -1145,6 +1145,23 @@ button {
   background: #183f37;
 }
 
+.actions button:disabled {
+  background: #9aa7a3;
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+.required-asterisk {
+  color: #d93025;
+  font-weight: 700;
+}
+
+.form-required-note {
+  margin: 8px 0 0;
+  color: #6e665f;
+  font-size: 0.88rem;
+}
+
 .message {
   margin-top: 10px;
   font-weight: 600;
